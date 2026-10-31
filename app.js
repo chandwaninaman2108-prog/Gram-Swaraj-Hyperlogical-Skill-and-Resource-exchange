@@ -11,13 +11,63 @@
    * 1. DATA
    * ------------------------------------------------------------------ */
 
-  /** In-memory store. Replace with fetch()/localStorage when a backend exists. */
-  const resources = [
+  /** Starter data, used only on first run (when nothing is saved in localStorage yet). */
+  const SEED_RESOURCES = [
     { id: 1, title: 'Cordless Power Drill',        category: 'Tools',          owner: 'Anita Verma', status: 'Available', date: '2026-10-24' },
     { id: 2, title: 'Engineering Mathematics Set', category: 'Study Material', owner: 'Rohan Sahu',  status: 'Claimed',   date: '2026-10-21' },
     { id: 3, title: 'Arduino Uno Starter Kit',     category: 'Lab Hardware',   owner: 'Meera Joshi', status: 'Available', date: '2026-10-27' },
     { id: 4, title: 'Python Tutoring (1 hr/wk)',   category: 'Skills',         owner: 'Karan Patel', status: 'Claimed',   date: '2026-10-18' }
   ];
+
+  /* ---------- localStorage persistence ---------- */
+
+  /** Bump the version suffix if the item shape ever changes. */
+  const STORAGE_KEY = 'gramSwaraj.resources.v1';
+
+  const CATEGORIES = ['Tools', 'Study Material', 'Lab Hardware', 'Skills'];
+  const STATUSES   = ['Available', 'Claimed'];
+
+  /** Guard against corrupted or hand-edited storage: keep only well-formed items. */
+  function isValidResource(r) {
+    return (
+      r && typeof r === 'object' &&
+      Number.isFinite(r.id) &&
+      typeof r.title === 'string' && r.title.trim() !== '' &&
+      typeof r.owner === 'string' &&
+      CATEGORIES.includes(r.category) &&
+      STATUSES.includes(r.status) &&
+      typeof r.date === 'string'
+    );
+  }
+
+  /** Save the full list. Fails quietly if storage is blocked or full (e.g. private mode). */
+  function saveResources() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(resources));
+    } catch (err) {
+      console.warn('Gram Swaraj: could not save to localStorage.', err);
+    }
+  }
+
+  /**
+   * Load saved items. Falls back to the seed data on first run
+   * or if the saved value cannot be parsed.
+   */
+  function loadResources() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw !== null) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed.filter(isValidResource);
+      }
+    } catch (err) {
+      console.warn('Gram Swaraj: saved data was unreadable, using starter data.', err);
+    }
+    return SEED_RESOURCES.map((r) => ({ ...r }));
+  }
+
+  /** The live, mutable list the whole app works from. */
+  const resources = loadResources();
 
   /**
    * Estimated kg of CO₂ avoided each time a shared item is claimed
@@ -201,11 +251,20 @@
     if (!item || item.status === 'Claimed') return;
 
     item.status = 'Claimed';
+    saveResources();
     updateStats();
     applyFilters();
   }
 
-  /** Add a new resource from the modal form. */
+  /** Clear search text and category so a newly added card is never hidden by a filter. */
+  function resetFilters() {
+    filters.query = '';
+    filters.category = 'All';
+    searchInput.value = '';
+    setActivePill(filterContainer.querySelector('[data-category="All"]'));
+  }
+
+  /** Add a new resource (used by both the modal and the bottom form) and save it. */
   function addResource({ title, category, owner }) {
     const nextId = resources.reduce((max, r) => Math.max(max, r.id), 0) + 1;
 
@@ -218,6 +277,8 @@
       date: new Date().toISOString().slice(0, 10)
     });
 
+    saveResources();
+    resetFilters();
     updateStats();
     applyFilters();
   }
@@ -286,10 +347,82 @@
   }
 
   /* ------------------------------------------------------------------ *
+   * 9b. BOTTOM-OF-PAGE FORM
+   * ------------------------------------------------------------------ */
+
+  /** Inject a simple "add an item" form below the grid and wire its submit handler. */
+  function mountInlineForm() {
+    const fieldClass =
+      'w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 ' +
+      'placeholder-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500';
+
+    const options = CATEGORIES.map((c) => `<option value="${c}">${c}</option>`).join('');
+
+    grid.closest('main').insertAdjacentHTML('afterend', `
+      <section id="quickAddSection" aria-labelledby="quickAddHeading"
+        class="mt-12 bg-slate-800 border border-slate-700 rounded-xl p-6">
+        <h2 id="quickAddHeading" class="text-lg font-semibold text-white">Add an item to the exchange</h2>
+        <p class="text-sm text-slate-400 mt-1">
+          Listings are saved in this browser, so they are still here after you refresh.
+        </p>
+
+        <form id="quickAddForm" class="mt-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+          <div>
+            <label for="quickTitle" class="block text-sm font-medium text-slate-300 mb-1">Item name</label>
+            <input id="quickTitle" type="text" maxlength="80" required
+              placeholder="e.g. Soldering iron" class="${fieldClass}" />
+          </div>
+          <div>
+            <label for="quickCategory" class="block text-sm font-medium text-slate-300 mb-1">Category</label>
+            <select id="quickCategory" class="${fieldClass}">${options}</select>
+          </div>
+          <div>
+            <label for="quickOwner" class="block text-sm font-medium text-slate-300 mb-1">Your name</label>
+            <input id="quickOwner" type="text" maxlength="60" required
+              placeholder="e.g. Anita Verma" class="${fieldClass}" />
+          </div>
+          <button type="submit"
+            class="rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-semibold px-4 py-2 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300">
+            Add item
+          </button>
+        </form>
+
+        <p id="quickAddMsg" class="text-sm mt-3 min-h-[1.25rem]" role="status" aria-live="polite"></p>
+      </section>
+    `);
+
+    const quickForm = $('quickAddForm');
+    const quickMsg  = $('quickAddMsg');
+
+    quickForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+
+      const title    = $('quickTitle').value.trim();
+      const category = $('quickCategory').value;
+      const owner    = $('quickOwner').value.trim();
+
+      // Whitespace-only input passes the native "required" check, so check again.
+      if (!title || !owner) {
+        quickMsg.className = 'text-sm mt-3 min-h-[1.25rem] text-amber-300';
+        quickMsg.textContent = 'Enter both an item name and your name.';
+        return;
+      }
+
+      addResource({ title, category, owner });
+
+      quickForm.reset();
+      quickMsg.className = 'text-sm mt-3 min-h-[1.25rem] text-emerald-300';
+      quickMsg.textContent = `"${title}" was added to the grid.`;
+      $('quickTitle').focus();
+    });
+  }
+
+  /* ------------------------------------------------------------------ *
    * 10. INIT
    * ------------------------------------------------------------------ */
 
   function init() {
+    mountInlineForm();
     bindEvents();
     updateStats();
 
