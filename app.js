@@ -1,0 +1,301 @@
+/**
+ * Gram Swaraj Hub - app.js
+ * Data storage, card rendering, telemetry, and live filtering.
+ * Depends on the element IDs defined in index.html.
+ */
+
+(() => {
+  'use strict';
+
+  /* ------------------------------------------------------------------ *
+   * 1. DATA
+   * ------------------------------------------------------------------ */
+
+  /** In-memory store. Replace with fetch()/localStorage when a backend exists. */
+  const resources = [
+    { id: 1, title: 'Cordless Power Drill',        category: 'Tools',          owner: 'Anita Verma', status: 'Available', date: '2026-10-24' },
+    { id: 2, title: 'Engineering Mathematics Set', category: 'Study Material', owner: 'Rohan Sahu',  status: 'Claimed',   date: '2026-10-21' },
+    { id: 3, title: 'Arduino Uno Starter Kit',     category: 'Lab Hardware',   owner: 'Meera Joshi', status: 'Available', date: '2026-10-27' },
+    { id: 4, title: 'Python Tutoring (1 hr/wk)',   category: 'Skills',         owner: 'Karan Patel', status: 'Claimed',   date: '2026-10-18' }
+  ];
+
+  /**
+   * Estimated kg of CO₂ avoided each time a shared item is claimed
+   * instead of someone buying a new one. Rough, illustrative values.
+   */
+  const CO2_PER_EXCHANGE_KG = {
+    'Tools': 12,
+    'Study Material': 3,
+    'Lab Hardware': 20,
+    'Skills': 1.5
+  };
+
+  /** Current filter state, shared by search and category handlers. */
+  const filters = { query: '', category: 'All' };
+
+  /* ------------------------------------------------------------------ *
+   * 2. DOM REFERENCES
+   * ------------------------------------------------------------------ */
+
+  const $ = (id) => document.getElementById(id);
+
+  const grid            = $('resourceGrid');
+  const searchInput     = $('searchInput');
+  const filterContainer = $('filterContainer');
+  const statTotal       = $('statTotal');
+  const statActive      = $('statActive');
+  const statSavings     = $('statSavings');
+
+  const modal           = $('resourceModal');
+  const openModalBtn    = $('openModalBtn');
+  const closeModalBtn   = $('closeModalBtn');
+  const form            = $('resourceForm');
+
+  /* ------------------------------------------------------------------ *
+   * 3. HELPERS
+   * ------------------------------------------------------------------ */
+
+  /** Escape user-provided text before injecting it into innerHTML. */
+  function escapeHTML(value) {
+    const div = document.createElement('div');
+    div.textContent = value;
+    return div.innerHTML;
+  }
+
+  /** Format an ISO date (YYYY-MM-DD) as e.g. "24 Oct 2026". */
+  function formatDate(iso) {
+    const d = new Date(iso);
+    return isNaN(d) ? iso : d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+
+  /** Tailwind classes for the category tag. */
+  const CATEGORY_STYLES = {
+    'Tools':          'bg-amber-500/10 text-amber-300 border-amber-500/30',
+    'Study Material': 'bg-sky-500/10 text-sky-300 border-sky-500/30',
+    'Lab Hardware':   'bg-violet-500/10 text-violet-300 border-violet-500/30',
+    'Skills':         'bg-rose-500/10 text-rose-300 border-rose-500/30'
+  };
+
+  /** Tailwind classes for the status badge: green = Available, slate = Claimed. */
+  const STATUS_STYLES = {
+    'Available': 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40',
+    'Claimed':   'bg-slate-700 text-slate-300 border-slate-600'
+  };
+
+  /* ------------------------------------------------------------------ *
+   * 4. RENDERING
+   * ------------------------------------------------------------------ */
+
+  /** Build the HTML string for a single resource card. */
+  function createCard(item) {
+    const isAvailable = item.status === 'Available';
+    const categoryClass = CATEGORY_STYLES[item.category] || 'bg-slate-700 text-slate-300 border-slate-600';
+
+    const buttonClass = isAvailable
+      ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-900'
+      : 'bg-slate-700 text-slate-400 cursor-not-allowed';
+
+    return `
+      <article class="bg-slate-800 border border-slate-700 rounded-xl p-5 flex flex-col gap-4">
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-xs font-medium px-2.5 py-1 rounded-full border ${categoryClass}">
+            ${escapeHTML(item.category)}
+          </span>
+          <span class="text-xs font-medium px-2.5 py-1 rounded-full border ${STATUS_STYLES[item.status]}">
+            ${escapeHTML(item.status)}
+          </span>
+        </div>
+
+        <div class="flex-1">
+          <h3 class="text-lg font-semibold text-white leading-snug">${escapeHTML(item.title)}</h3>
+          <p class="text-sm text-slate-400 mt-1">Shared by ${escapeHTML(item.owner)}</p>
+          <p class="text-xs text-slate-500 mt-1">Listed ${formatDate(item.date)}</p>
+        </div>
+
+        <button id="claimBtn-${item.id}" type="button" data-id="${item.id}"
+          ${isAvailable ? '' : 'disabled'}
+          class="w-full rounded-lg font-semibold px-4 py-2 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 ${buttonClass}">
+          ${isAvailable ? 'Claim this' : 'Already claimed'}
+        </button>
+      </article>
+    `;
+  }
+
+  /** Empty-state card shown when no items match the current filters. */
+  function createEmptyState() {
+    return `
+      <div class="col-span-full text-center bg-slate-800 border border-dashed border-slate-700 rounded-xl py-12 px-6">
+        <p class="text-slate-200 font-medium">No resources match your search.</p>
+        <p class="text-slate-400 text-sm mt-1">Try a different keyword or category, or share something yourself.</p>
+      </div>
+    `;
+  }
+
+  /** Replace the contents of #resourceGrid with cards for the given items. */
+  function renderGrid(items) {
+    grid.innerHTML = items.length
+      ? items.map(createCard).join('')
+      : createEmptyState();
+  }
+
+  /* ------------------------------------------------------------------ *
+   * 5. TELEMETRY
+   * ------------------------------------------------------------------ */
+
+  /**
+   * Update the three stat counters from the full dataset (not the filtered view).
+   *  - Total: every shared item
+   *  - Active: items still Available
+   *  - Savings: estimated kg CO₂ avoided by items that were claimed (reused)
+   */
+  function updateStats() {
+    const total     = resources.length;
+    const available = resources.filter((r) => r.status === 'Available').length;
+    const savedKg   = resources
+      .filter((r) => r.status === 'Claimed')
+      .reduce((sum, r) => sum + (CO2_PER_EXCHANGE_KG[r.category] || 0), 0);
+
+    statTotal.textContent   = total;
+    statActive.textContent  = available;
+    statSavings.textContent = `${Number.isInteger(savedKg) ? savedKg : savedKg.toFixed(1)} kg`;
+  }
+
+  /* ------------------------------------------------------------------ *
+   * 6. FILTERING
+   * ------------------------------------------------------------------ */
+
+  /** Apply the current search query and category, then re-render. */
+  function applyFilters() {
+    const q = filters.query.trim().toLowerCase();
+
+    const visible = resources.filter((item) => {
+      const matchesCategory = filters.category === 'All' || item.category === filters.category;
+      const matchesQuery =
+        !q || item.title.toLowerCase().includes(q) || item.owner.toLowerCase().includes(q);
+      return matchesCategory && matchesQuery;
+    });
+
+    renderGrid(visible);
+  }
+
+  /** Visually mark the selected pill as active; reset the others. */
+  function setActivePill(activeBtn) {
+    const ACTIVE   = ['bg-emerald-500', 'text-slate-900', 'border-emerald-500'];
+    const INACTIVE = ['bg-slate-800', 'text-slate-300', 'border-slate-700'];
+
+    filterContainer.querySelectorAll('.filter-pill').forEach((btn) => {
+      const isActive = btn === activeBtn;
+      btn.classList.remove(...(isActive ? INACTIVE : ACTIVE));
+      btn.classList.add(...(isActive ? ACTIVE : INACTIVE));
+      btn.setAttribute('aria-pressed', String(isActive));
+    });
+  }
+
+  /* ------------------------------------------------------------------ *
+   * 7. ACTIONS
+   * ------------------------------------------------------------------ */
+
+  /** Mark a resource as Claimed, then refresh the grid and stats. */
+  function claimResource(id) {
+    const item = resources.find((r) => r.id === id);
+    if (!item || item.status === 'Claimed') return;
+
+    item.status = 'Claimed';
+    updateStats();
+    applyFilters();
+  }
+
+  /** Add a new resource from the modal form. */
+  function addResource({ title, category, owner }) {
+    const nextId = resources.reduce((max, r) => Math.max(max, r.id), 0) + 1;
+
+    resources.unshift({
+      id: nextId,
+      title,
+      category,
+      owner,
+      status: 'Available',
+      date: new Date().toISOString().slice(0, 10)
+    });
+
+    updateStats();
+    applyFilters();
+  }
+
+  /* ------------------------------------------------------------------ *
+   * 8. MODAL
+   * ------------------------------------------------------------------ */
+
+  function openModal() {
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    $('itemTitle').focus();
+  }
+
+  function closeModal() {
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+    form.reset();
+    openModalBtn.focus();
+  }
+
+  /* ------------------------------------------------------------------ *
+   * 9. EVENT WIRING
+   * ------------------------------------------------------------------ */
+
+  function bindEvents() {
+    // Live search: runs on every keystroke.
+    searchInput.addEventListener('input', (e) => {
+      filters.query = e.target.value;
+      applyFilters();
+    });
+
+    // Category pills: one delegated listener on the container.
+    filterContainer.addEventListener('click', (e) => {
+      const pill = e.target.closest('.filter-pill');
+      if (!pill) return;
+      filters.category = pill.dataset.category;
+      setActivePill(pill);
+      applyFilters();
+    });
+
+    // Claim buttons: delegated, because cards are re-rendered often.
+    grid.addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-id]');
+      if (btn) claimResource(Number(btn.dataset.id));
+    });
+
+    // Modal open/close.
+    openModalBtn.addEventListener('click', openModal);
+    closeModalBtn.addEventListener('click', closeModal);
+    modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !modal.classList.contains('hidden')) closeModal();
+    });
+
+    // Modal form submit.
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      addResource({
+        title:    $('itemTitle').value.trim(),
+        category: $('itemCategory').value,
+        owner:    $('itemOwner').value.trim()
+      });
+      closeModal();
+    });
+  }
+
+  /* ------------------------------------------------------------------ *
+   * 10. INIT
+   * ------------------------------------------------------------------ */
+
+  function init() {
+    bindEvents();
+    updateStats();
+
+    // Keep the HTML skeleton visible briefly to simulate loading, then render.
+    setTimeout(() => renderGrid(resources), 600);
+  }
+
+  init();
+})();
