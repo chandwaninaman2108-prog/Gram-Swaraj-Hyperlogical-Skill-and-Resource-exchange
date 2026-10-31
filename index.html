@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Gram Swaraj Hub | Hyperlocal Campus Resource Exchange</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen antialiased">
+
+  <div class="max-w-6xl mx-auto px-4 sm:px-6 py-8">
+
+    <!-- Header -->
+    <header class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+      <div>
+        <h1 class="text-3xl font-bold tracking-tight text-white">Gram Swaraj Hub</h1>
+        <p class="text-slate-400 mt-1">Hyperlocal Campus Resource Exchange</p>
+      </div>
+      <button id="openModalBtn" type="button"
+        class="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-semibold px-5 py-2.5 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900">
+        ➕ Share a Resource
+      </button>
+    </header>
+
+    <!-- Telemetry Banner -->
+    <section aria-label="Community statistics"
+      class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+      <div class="bg-slate-800 border border-slate-700 rounded-xl p-5">
+        <p class="text-sm text-slate-400">Total Shared Items</p>
+        <p id="statTotal" class="text-3xl font-bold text-emerald-400 mt-1">0</p>
+      </div>
+      <div class="bg-slate-800 border border-slate-700 rounded-xl p-5">
+        <p class="text-sm text-slate-400">Active Peer Exchanges</p>
+        <p id="statActive" class="text-3xl font-bold text-emerald-400 mt-1">0</p>
+      </div>
+      <div class="bg-slate-800 border border-slate-700 rounded-xl p-5">
+        <p class="text-sm text-slate-400">Community CO₂ Saved</p>
+        <p id="statSavings" class="text-3xl font-bold text-emerald-400 mt-1">0 kg</p>
+      </div>
+    </section>
+
+    <!-- Search & Filters -->
+    <section aria-label="Search and filter" class="mb-8 space-y-4">
+      <label for="searchInput" class="sr-only">Search resources</label>
+      <input id="searchInput" type="search" placeholder="Search tools, books, lab gear..."
+        class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
+
+      <div id="filterContainer" class="flex flex-wrap gap-2" role="group" aria-label="Filter by category">
+        <button type="button" data-category="All"
+          class="filter-pill px-4 py-1.5 rounded-full text-sm font-medium bg-emerald-500 text-slate-900 border border-emerald-500 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300">All</button>
+        <button type="button" data-category="Tools"
+          class="filter-pill px-4 py-1.5 rounded-full text-sm font-medium bg-slate-800 text-slate-300 border border-slate-700 hover:border-emerald-500 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300">Tools</button>
+        <button type="button" data-category="Study Material"
+          class="filter-pill px-4 py-1.5 rounded-full text-sm font-medium bg-slate-800 text-slate-300 border border-slate-700 hover:border-emerald-500 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300">Study Material</button>
+        <button type="button" data-category="Lab Hardware"
+          class="filter-pill px-4 py-1.5 rounded-full text-sm font-medium bg-slate-800 text-slate-300 border border-slate-700 hover:border-emerald-500 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300">Lab Hardware</button>
+        <button type="button" data-category="Skills"
+          class="filter-pill px-4 py-1.5 rounded-full text-sm font-medium bg-slate-800 text-slate-300 border border-slate-700 hover:border-emerald-500 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300">Skills</button>
+      </div>
+    </section>
+
+    <!-- Resource Grid (with loading skeleton) -->
+    <main>
+      <div id="resourceGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" aria-live="polite">
+        <div class="bg-slate-800 border border-slate-700 rounded-xl p-5 animate-pulse">
+          <div class="h-4 w-20 bg-slate-700 rounded mb-4"></div>
+          <div class="h-6 w-3/4 bg-slate-700 rounded mb-3"></div>
+          <div class="h-3 w-full bg-slate-700 rounded mb-2"></div>
+          <div class="h-3 w-5/6 bg-slate-700 rounded mb-6"></div>
+          <div class="h-9 w-full bg-slate-700 rounded"></div>
+        </div>
+        <div class="bg-slate-800 border border-slate-700 rounded-xl p-5 animate-pulse">
+          <div class="h-4 w-20 bg-slate-700 rounded mb-4"></div>
+          <div class="h-6 w-3/4 bg-slate-700 rounded mb-3"></div>
+          <div class="h-3 w-full bg-slate-700 rounded mb-2"></div>
+          <div class="h-3 w-5/6 bg-slate-700 rounded mb-6"></div>
+          <div class="h-9 w-full bg-slate-700 rounded"></div>
+        </div>
+        <div class="bg-slate-800 border border-slate-700 rounded-xl p-5 animate-pulse">
+          <div class="h-4 w-20 bg-slate-700 rounded mb-4"></div>
+          <div class="h-6 w-3/4 bg-slate-700 rounded mb-3"></div>
+          <div class="h-3 w-full bg-slate-700 rounded mb-2"></div>
+          <div class="h-3 w-5/6 bg-slate-700 rounded mb-6"></div>
+          <div class="h-9 w-full bg-slate-700 rounded"></div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Add Resource Modal -->
+  <div id="resourceModal"
+    class="hidden fixed inset-0 z-50 items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4"
+    role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="w-full max-w-md bg-slate-800 border border-slate-700 rounded-xl shadow-2xl p-6">
+      <h2 id="modalTitle" class="text-xl font-bold text-white mb-4">Share a Resource</h2>
+
+      <form id="resourceForm" class="space-y-4">
+        <div>
+          <label for="itemTitle" class="block text-sm font-medium text-slate-300 mb-1">Title</label>
+          <input id="itemTitle" type="text" required
+            class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
+        </div>
+
+        <div>
+          <label for="itemCategory" class="block text-sm font-medium text-slate-300 mb-1">Category</label>
+          <select id="itemCategory" required
+            class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+            <option value="Tools">Tools</option>
+            <option value="Study Material">Study Material</option>
+            <option value="Lab Hardware">Lab Hardware</option>
+            <option value="Skills">Skills</option>
+          </select>
+        </div>
+
+        <div>
+          <label for="itemOwner" class="block text-sm font-medium text-slate-300 mb-1">Owner Name</label>
+          <input id="itemOwner" type="text" required
+            class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
+        </div>
+
+        <div>
+          <label for="itemDesc" class="block text-sm font-medium text-slate-300 mb-1">Description</label>
+          <textarea id="itemDesc" rows="3" required
+            class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"></textarea>
+        </div>
+
+        <div class="flex justify-end gap-3 pt-2">
+          <button id="closeModalBtn" type="button"
+            class="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400">
+            Close
+          </button>
+          <button type="submit"
+            class="px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300">
+            Share resource
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="app.js" defer></script>
+</body>
+</html>
